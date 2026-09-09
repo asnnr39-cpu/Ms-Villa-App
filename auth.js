@@ -24,6 +24,10 @@ function renderLogin(){
       <select id="login-user">${options}</select>
       <label>Password</label>
       <input type="password" id="login-pass" placeholder="Enter password">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:-4px 0 16px;">
+        <input type="checkbox" id="login-remember" checked style="width:auto; margin:0;">
+        <span>Keep me logged in</span>
+      </label>
       <div class="error" id="login-error" style="display:none;"></div>
       <button class="btn-primary" id="login-btn">Sign In</button>
     </div>
@@ -36,7 +40,9 @@ function renderLogin(){
     const p = $("#login-pass").value;
     const member = state.members.find(m=>m.username===u);
     if(member && member.password===p){
+      const remember = $("#login-remember").checked;
       state.session = { username: u };
+      persistSession(state.session, remember);
       state.view = "home";
       render();
       askToEnableNotifications();
@@ -67,6 +73,10 @@ function renderPhoneLogin(){
       <div id="otp-verify-block" style="display:none; margin-top:16px;">
         <label>Enter the 6-digit code</label>
         <div class="otp-box"><input type="text" id="otp-code" maxlength="6"></div>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:4px 0 16px;">
+          <input type="checkbox" id="otp-remember" checked style="width:auto; margin:0;">
+          <span>Keep me logged in</span>
+        </label>
         <button class="btn-primary" id="otp-verify">Verify &amp; Sign In</button>
       </div>
     </div>
@@ -91,7 +101,9 @@ function renderPhoneLogin(){
     const p = state.pendingOtp;
     if(!p || Date.now() > p.expiresAt){ err.style.display="block"; err.textContent="Code expired. Send a new one."; return; }
     if(entered !== p.code){ err.style.display="block"; err.textContent="That code doesn't match."; return; }
+    const remember = $("#otp-remember").checked;
     state.session = { username: p.username };
+    persistSession(state.session, remember);
     state.pendingOtp = null;
     state.view = "home";
     render();
