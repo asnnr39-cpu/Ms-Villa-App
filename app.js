@@ -430,6 +430,11 @@ function renderRent(){
         <div class="sub">Pay via UPI</div>
       </div>
     `)}
+    <div class="card" style="text-align:center; padding:20px;">
+      <div class="lbl" style="font-size:11px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px;">Scan to Pay</div>
+      <img src="phonepe-qr.jpg" alt="PhonePe QR code" width="240" style="border-radius:10px; border:1px solid var(--line); max-width:100%; height:auto;">
+      <div class="foot-note" style="margin-top:10px;">Open PhonePe (or any UPI app) and scan this code.</div>
+    </div>
     <div class="upi-box">
       <div>UPI ID</div>
       <div class="id">${RENT_INFO.upiId}</div>
