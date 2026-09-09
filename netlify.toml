@@ -10,7 +10,7 @@
 # reads to schedule the run; the `config.schedule` export inside the
 # function file is used by `netlify dev` for local testing and should be
 # kept in sync with this.
-[[functions."scheduled-reminders"]]
+[functions."scheduled-reminders"]
   schedule = "*/15 * * * *"
 
 # Service worker must never be served from cache / a stale CDN copy, or
