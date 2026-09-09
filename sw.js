@@ -14,13 +14,13 @@ const APP_SHELL = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/js/database.js",
-  "/js/auth.js",
-  "/js/admin.js",
-  "/js/notifications.js",
-  "/js/app.js",
-  "/assets/icons/icon-192.png",
-  "/assets/icons/icon-512.png"
+  "/database.js",
+  "/auth.js",
+  "/admin.js",
+  "/notifications.js",
+  "/app.js",
+  "/icon-192.png",
+  "/icon-512.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -66,8 +66,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: "/assets/icons/icon-192.png",
-      badge: "/assets/icons/icon-192.png",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       data: payload.data || {}
     })
   );
