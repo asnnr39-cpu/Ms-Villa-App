@@ -148,6 +148,71 @@ function openEditExpensesModal(){
   renderModal();
 }
 
+// Admin-only modal for adding/editing/removing entries in the day-wise
+// spending log (separate from the monthly Room Expenses ledger).
+function openEditDailyExpensesModal(){
+  // work on a deep copy so Cancel doesn't mutate state
+  const draft = JSON.parse(JSON.stringify(state.dailyExpenses||[]));
+
+  const wrap = document.createElement("div");
+  wrap.className = "modal-bg";
+  document.body.appendChild(wrap);
+
+  function rowHtml(e, i){
+    return `
+      <div class="member-row" style="align-items:flex-start; flex-wrap:wrap; gap:8px 10px;">
+        <input type="date" class="d-row-date" data-i="${i}" value="${e.date||''}" style="flex:1 1 140px; margin-bottom:0;">
+        <input type="text" inputmode="numeric" class="d-row-amount" data-i="${i}" value="${e.amount||0}" placeholder="Amount" style="width:100px; margin-bottom:0;">
+        <input type="text" class="d-row-note" data-i="${i}" value="${e.note||''}" placeholder="Note (optional)" style="flex:1 1 100%; margin-bottom:0;">
+        <span data-remove-row="${i}" style="color:var(--danger); font-size:12px; cursor:pointer;">Remove entry</span>
+      </div>
+    `;
+  }
+
+  function renderModal(){
+    wrap.innerHTML = `
+      <div class="modal">
+        <h3>Daily Expenses</h3>
+        ${draft.length ? draft.map(rowHtml).join("") : `<div class="foot-note" style="padding:0 0 14px; text-align:left;">No entries yet — add the first one below.</div>`}
+        <button type="button" class="btn-ghost" id="d-add-row" style="margin-top:2px;">+ Add Expense Entry</button>
+        <div class="error" id="d-err" style="display:none;"></div>
+        <button class="btn-primary" id="d-save" style="margin-top:14px;">Save Changes</button>
+        <button class="btn-ghost" id="d-cancel">Cancel</button>
+      </div>
+    `;
+
+    wrap.querySelector("#d-cancel").onclick = ()=> wrap.remove();
+
+    wrap.querySelector("#d-add-row").onclick = ()=>{
+      draft.push({ date: todayKey(), amount:0, note:"" });
+      renderModal();
+    };
+    wrap.querySelectorAll("[data-remove-row]").forEach(el=>{
+      el.onclick = ()=>{ draft.splice(parseInt(el.getAttribute("data-remove-row"),10),1); renderModal(); };
+    });
+
+    wrap.querySelector("#d-save").onclick = async ()=>{
+      const err = wrap.querySelector("#d-err");
+      err.style.display = "none";
+
+      // pull latest field values into draft before validating/saving
+      wrap.querySelectorAll(".d-row-date").forEach(el=> draft[parseInt(el.getAttribute("data-i"),10)].date = el.value);
+      wrap.querySelectorAll(".d-row-amount").forEach(el=> draft[parseInt(el.getAttribute("data-i"),10)].amount = Number(el.value)||0);
+      wrap.querySelectorAll(".d-row-note").forEach(el=> draft[parseInt(el.getAttribute("data-i"),10)].note = el.value.trim());
+
+      if(draft.some(e=>!e.date)){ err.style.display="block"; err.textContent="Every entry needs a date."; return; }
+
+      state.dailyExpenses = draft;
+      await sset("ms-villa:daily-expenses", state.dailyExpenses);
+      wrap.remove();
+      renderDailyExpenses();
+      notifyMembers("Daily expenses updated", "An admin just added or updated a daily expense entry.");
+    };
+  }
+
+  renderModal();
+}
+
 
 function openAddMemberModal(){
   const wrap = document.createElement("div");
