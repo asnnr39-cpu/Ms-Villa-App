@@ -1,4 +1,4 @@
-  // ms-villa-app / js/database.js
+// ms-villa-app / js/database.js
 //
 // App-wide constants (default members, rooms, duty rosters, ledger seed,
 // icons, etc.) plus the shared data layer. All state lives on the global
