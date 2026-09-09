@@ -47,6 +47,7 @@ function renderView(){
   if(state.view==="changepass") return renderChangePass();
   if(state.view==="duty") return renderDuty();
   if(state.view==="expenses") return renderExpenses();
+  if(state.view==="dailyExpenses") return renderDailyExpenses();
   if(state.view==="rent") return renderRent();
   if(state.view==="complaints") return renderComplaints();
   if(state.view==="meetings") return renderMeetings();
@@ -99,6 +100,7 @@ function renderHome(){
   const quickLinks = [
     {id:"duty", name:"Duty Schedule"},
     {id:"expenses", name:"Room Expenses"},
+    {id:"dailyExpenses", name:"Daily Expenses"},
     {id:"rent", name:"Rent & Pay"},
     {id:"complaints", name:"Complaints"},
     {id:"meetings", name:"Meetings"}
@@ -370,6 +372,53 @@ function renderExpenses(){
   if(editBtn) editBtn.onclick = ()=> openEditExpensesModal();
 }
 
+// Day-wise spending log, separate from the monthly Room Expenses ledger.
+// Shows every logged entry sorted newest-first, with a running total for
+// the current month and an all-time total.
+function renderDailyExpenses(){
+  const me = state.members.find(m=>m.username===state.session.username);
+  const list = (state.dailyExpenses||[]).slice().sort((a,b)=> (b.date||"").localeCompare(a.date||""));
+  const monthKey = todayKey().slice(0,7);
+  const monthTotal = sumDailyExpenses(dailyExpensesForMonth(list, monthKey));
+  const grandTotal = sumDailyExpenses(list);
+
+  const rows = list.map(e=>`
+    <tr>
+      <td>${e.date||""}</td>
+      <td class="num">${inr(Number(e.amount)||0)}</td>
+      <td style="font-size:11px; color:var(--muted);">${e.note||""}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="3" style="text-align:center; color:var(--muted); padding:16px 6px; font-size:13px;">No expenses recorded yet.</td></tr>`;
+
+  app.innerHTML = `
+    ${topbar("Daily Expenses","home")}
+    ${heroWrap("kitchen", `
+      <div class="house-title" style="padding-top:0;">
+        <h1 style="font-size:26px;">Daily Expenses</h1>
+        <div class="sub">Day-wise spending log</div>
+      </div>
+    `)}
+    <div class="section-title">This Month</div>
+    <div class="card dues-card">
+      <div class="dues-top">
+        <div class="dues-label">Spent in ${monthKey}</div>
+      </div>
+      <div class="dues-amount">${inr(monthTotal)}</div>
+      <div class="dues-note">All-time total: ${inr(grandTotal)}</div>
+    </div>
+    <div class="section-title">Log</div>
+    <div class="card" style="padding:14px 12px; overflow-x:auto;">
+      <table class="ledger-table">
+        <tr><th>Date</th><th>Amount</th><th>Note</th></tr>
+        ${rows}
+      </table>
+    </div>
+    ${me.admin ? `<div class="nav-row"><button class="btn-line" id="edit-daily-expenses" style="flex:1;">Add / Edit Expenses</button></div>` : ""}
+  `;
+  const editBtn = $("#edit-daily-expenses");
+  if(editBtn) editBtn.onclick = ()=> openEditDailyExpensesModal();
+}
+
 
 function renderRent(){
   const upiLink = `upi://pay?pa=${encodeURIComponent(RENT_INFO.upiId)}&pn=${encodeURIComponent(RENT_INFO.payeeName)}&cu=INR`;
@@ -418,283 +467,4 @@ function renderComplaints(){
       </div>
     `)}
     <div class="nav-row"><button class="btn-primary" id="new-complaint">+ New Complaint</button></div>
-    <div class="section-title">All Complaints</div>
-    ${rows}
-  `;
-  $("#new-complaint").onclick = ()=> openComplaintModal();
-  app.querySelectorAll("[data-close]").forEach(el=>{
-    el.onclick = async ()=>{
-      const id = el.getAttribute("data-close");
-      const c = state.complaints.find(x=>x.id===id);
-      if(c){ c.status="closed"; await sset("ms-villa:complaints", state.complaints); renderComplaints(); }
-    };
-  });
-}
-
-function openComplaintModal(){
-  const cats = COMPLAINT_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join("");
-  const wrap = document.createElement("div");
-  wrap.className = "modal-bg";
-  wrap.innerHTML = `
-    <div class="modal">
-      <h3>New Complaint</h3>
-      <label>Category</label>
-      <select id="c-cat">${cats}</select>
-      <label>Describe the issue</label>
-      <textarea id="c-desc" placeholder="e.g. Washing machine drum not spinning, making loud noise"></textarea>
-      <div class="error" id="c-err" style="display:none;"></div>
-      <button class="btn-primary" id="c-save">Submit Complaint</button>
-      <button class="btn-ghost" id="c-cancel">Cancel</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-  wrap.querySelector("#c-cancel").onclick = ()=> wrap.remove();
-  wrap.querySelector("#c-save").onclick = async ()=>{
-    const desc = wrap.querySelector("#c-desc").value.trim();
-    const err = wrap.querySelector("#c-err");
-    if(!desc){ err.style.display="block"; err.textContent="Please describe the issue."; return; }
-    const complaint = {
-      id: "c" + Date.now(),
-      username: state.session.username,
-      category: wrap.querySelector("#c-cat").value,
-      description: desc,
-      status: "open",
-      createdAt: new Date().toISOString()
-    };
-    state.complaints.push(complaint);
-    await sset("ms-villa:complaints", state.complaints);
-    wrap.remove();
-    renderComplaints();
-    notifyMembers("New complaint raised", `${complaint.category}: ${complaint.description.slice(0,80)}`);
-  };
-}
-
-function renderMeetings(){
-  const me = state.members.find(m=>m.username===state.session.username);
-  const now = Date.now();
-  const sorted = [...state.meetings].sort((a,b)=> new Date(a.time) - new Date(b.time));
-  const upcoming = sorted.filter(m=> !m.time || new Date(m.time).getTime() >= now - 60*60*1000);
-  const past = sorted.filter(m=> m.time && new Date(m.time).getTime() < now - 60*60*1000);
-
-  function card(m){
-    const when = m.time ? new Date(m.time).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : "No time set";
-    return `
-      <div class="meeting-card">
-        <div class="top">
-          <div>
-            <div class="title">${m.title}</div>
-            <div class="meta">${when}</div>
-          </div>
-          <span class="meeting-platform-pill">${m.platform}</span>
-        </div>
-        ${m.notes ? `<div class="meta" style="margin-top:6px;">${m.notes}</div>` : ""}
-        <a class="join-btn" href="${m.link}" target="_blank" rel="noopener">Join ${m.platform}</a>
-        ${me.admin ? `<span data-del-meeting="${m.id}" style="color:var(--danger); font-size:11px; margin-left:12px; cursor:pointer;">Remove</span>` : ""}
-      </div>
-    `;
-  }
-
-  app.innerHTML = `
-    ${topbar("Meetings","home")}
-    ${heroWrap("living", `
-      <div class="house-title" style="padding-top:0;">
-        <h1 style="font-size:26px;">Meetings</h1>
-        <div class="sub">Zoom &amp; Google Meet links</div>
-      </div>
-    `)}
-    ${me.admin ? `<div class="fab-add"><button class="btn-primary" id="add-meeting">+ Schedule a Meeting</button></div>` : ""}
-    <div class="section-title">Upcoming</div>
-    ${upcoming.length ? upcoming.map(card).join("") : `<div class="foot-note" style="padding:0 18px 18px;">No meetings scheduled yet.</div>`}
-    ${past.length ? `<div class="section-title">Past</div>${past.map(card).join("")}` : ""}
-  `;
-
-  if(me.admin){
-    $("#add-meeting").onclick = ()=> openMeetingModal();
-    app.querySelectorAll("[data-del-meeting]").forEach(el=>{
-      el.onclick = async ()=>{
-        const id = el.getAttribute("data-del-meeting");
-        state.meetings = state.meetings.filter(m=>m.id!==id);
-        await sset("ms-villa:meetings", state.meetings);
-        renderMeetings();
-      };
-    });
-  }
-}
-
-function openMeetingModal(){
-  const wrap = document.createElement("div");
-  wrap.className = "modal-bg";
-  wrap.innerHTML = `
-    <div class="modal">
-      <h3>Schedule a Meeting</h3>
-      <label>Title</label>
-      <input type="text" id="m-title" placeholder="e.g. Monthly house meeting">
-      <label>Platform</label>
-      <select id="m-platform">
-        <option>Zoom</option>
-        <option>Google Meet</option>
-        <option>Microsoft Teams</option>
-        <option>Other</option>
-      </select>
-      <label>Meeting link</label>
-      <input type="text" id="m-link" placeholder="https://zoom.us/j/...">
-      <label>Date &amp; time</label>
-      <input type="text" id="m-time" placeholder="YYYY-MM-DDTHH:MM" onfocus="(this.type='datetime-local')">
-      <label>Notes (optional)</label>
-      <textarea id="m-notes" placeholder="Agenda, dial-in details, etc."></textarea>
-      <div class="error" id="m-error" style="display:none;"></div>
-      <button class="btn-primary" id="m-save">Save Meeting</button>
-      <button class="btn-ghost" id="m-cancel">Cancel</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-  $("#m-cancel").onclick = ()=> wrap.remove();
-  $("#m-save").onclick = async ()=>{
-    const title = $("#m-title").value.trim();
-    const link = $("#m-link").value.trim();
-    const err = $("#m-error");
-    if(!title || !link){ err.style.display="block"; err.textContent="Title and link are required."; return; }
-    const time = $("#m-time").value || null;
-    state.meetings.push({
-      id: "m_" + Date.now(),
-      title,
-      platform: $("#m-platform").value,
-      link,
-      time,
-      notes: $("#m-notes").value.trim(),
-      createdBy: state.session.username
-    });
-    await sset("ms-villa:meetings", state.meetings);
-    wrap.remove();
-    renderMeetings();
-    notifyMembers(`Meeting scheduled: ${title}`, time ? `Starts ${time}` : "Check the Meetings tab for details.");
-  };
-}
-
-function renderSettings(){
-  const me = state.members.find(m=>m.username===state.session.username);
-  const memberRows = state.members.map(m=>`
-    <div class="member-row">
-      <div class="left"><div class="avatar-empty">${m.name[0]}</div><div>
-        <div class="name">${m.name}</div><div class="tag">${m.username}${m.admin? ' · admin':''}${m.phone? ' · '+m.phone : ''}</div>
-      </div></div>
-      ${me.admin ? `<span data-edit-phone="${m.username}" style="color:var(--accent); font-size:11px; cursor:pointer;">${m.phone? 'Edit phone' : 'Add phone'}</span>` : ""}
-    </div>
-  `).join("");
-  app.innerHTML = `
-    ${topbar("Settings","home")}
-    ${heroWrap("living", `
-      <div class="house-title" style="padding-top:0;">
-        <h1 style="font-size:26px;">Settings</h1>
-        <div class="sub">${me.name}</div>
-      </div>
-    `)}
-    <div class="nav-row">
-      <button class="btn-primary" id="go-changepass">Change Password</button>
-    </div>
-    <div class="section-title">Notifications</div>
-    <div class="card">
-      <div class="foot-note" style="margin:0 0 12px; text-align:left;" id="notif-status">${notificationStatusLabel()}</div>
-      <button class="btn-line" id="toggle-notif" style="width:100%;">${notificationsEnabled() ? "Turn Off Notifications" : "Enable Notifications"}</button>
-    </div>
-    ${me.admin ? `
-      <div class="section-title">All Members (${state.members.length}/15)</div>
-      <div class="card" style="padding:6px 18px;">${memberRows}</div>
-      <div class="nav-row"><button class="btn-line" id="add-member" style="flex:1;">Add Member</button></div>
-      <div class="section-title">Support / Chat with us</div>
-      <div class="card">
-        <label>WhatsApp number for "Chat with us" (with country code)</label>
-        <input type="text" id="support-phone" placeholder="+91 98765 43210" value="${state.supportPhone||''}">
-        <button class="btn-primary" id="save-support">Save Number</button>
-      </div>
-    ` : ""}
-    <div class="nav-row"><button class="btn-ghost" id="logout">Sign Out</button></div>
-  `;
-  $("#go-changepass").onclick = ()=>{ state.view="changepass"; render(); };
-  $("#logout").onclick = ()=>{ state.session=null; state.view="login"; render(); };
-  $("#toggle-notif").onclick = async ()=>{
-    if(notificationsEnabled()){ await unsubscribeFromPush(); } else { await subscribeToPush(); }
-    renderSettings();
-  };
-  if(me.admin){
-    $("#add-member").onclick = ()=> openAddMemberModal();
-    $("#save-support").onclick = async ()=>{
-      state.supportPhone = $("#support-phone").value.trim();
-      await sset("ms-villa:support-phone", state.supportPhone);
-      renderChatFab();
-      renderSettings();
-    };
-    app.querySelectorAll("[data-edit-phone]").forEach(el=>{
-      el.onclick = async ()=>{
-        const username = el.getAttribute("data-edit-phone");
-        const m = state.members.find(x=>x.username===username);
-        const phone = prompt(`Mobile number for ${m.name} (used for OTP sign-in):`, m.phone||"");
-        if(phone===null) return;
-        m.phone = phone.trim();
-        await sset("ms-villa:members", state.members);
-        renderSettings();
-      };
-    });
-  }
-}
-
-
-document.addEventListener("click", (e)=>{
-  const t = e.target.closest("[data-nav]");
-  if(t && t.getAttribute("data-nav")){
-    const target = t.getAttribute("data-nav");
-    if(target==="home"){ state.view="home"; render(); }
-    if(target==="settings"){ state.view="settings"; render(); }
-    if(target==="login"){ state.view="login"; render(); }
-    if(target==="phoneLogin"){ state.view="phoneLogin"; render(); }
-  }
-});
-
-// Keeps everyone's data fresh without needing a manual refresh.
-// The shared data function has no websocket/push support of its own for
-// in-app state, so this polls it periodically and also re-syncs the moment
-// the app regains focus
-// (e.g. switching back from another app), which covers the common
-// "admin changed something and I don't see it" case quickly.
-let syncing = false;
-async function syncNow(){
-  if(syncing || !state.session) return;
-  syncing = true;
-  try{
-    const before = JSON.stringify({
-      members: state.members, meetings: state.meetings, ledger: state.ledger,
-      cookingStaff: state.cookingStaff, waterDuty: state.waterDuty,
-      weeklyVesselDuty: state.weeklyVesselDuty, supportPhone: state.supportPhone,
-      vesselOverrides: state.vesselOverrides, cookingOverrides: state.cookingOverrides,
-      complaints: state.complaints
-    });
-    await loadCore();
-    const after = JSON.stringify({
-      members: state.members, meetings: state.meetings, ledger: state.ledger,
-      cookingStaff: state.cookingStaff, waterDuty: state.waterDuty,
-      weeklyVesselDuty: state.weeklyVesselDuty, supportPhone: state.supportPhone,
-      vesselOverrides: state.vesselOverrides, cookingOverrides: state.cookingOverrides,
-      complaints: state.complaints
-    });
-    if(before !== after && state.view !== "room"){ renderView(); renderChatFab(); }
-  }catch(e){ /* offline or storage hiccup - ignore and try again next tick */ }
-  syncing = false;
-}
-setInterval(syncNow, 6000);
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) syncNow(); });
-window.addEventListener("focus", syncNow);
-window.addEventListener("online", syncNow);
-
-(async function init(){
-  await loadCore();
-  render();
-  initNotifications();
-})();
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-  });
-}
-
-
+    <div class="section-title">All Complaints
