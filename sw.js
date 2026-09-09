@@ -9,7 +9,7 @@
 //      (directly, or via scheduled-reminders.js) and show them as OS
 //      notifications, even when the app isn't open.
 
-const CACHE_NAME = "ms-villa-cache-v1";
+const CACHE_NAME = "ms-villa-cache-v2";
 const APP_SHELL = [
   "/",
   "/index.html",
