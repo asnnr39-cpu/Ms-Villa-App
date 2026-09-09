@@ -317,3 +317,35 @@ function dailyExpensesForMonth(list, monthKey){
   return (list||[]).filter(e => (e.date||"").slice(0,7) === monthKey);
 }
 
+// --- Session persistence ("Keep me logged in") --------------------------
+// state.session normally lives only in memory, so a page refresh would
+// always drop back to the login screen. To support "Keep me logged in",
+// we mirror the session to localStorage (survives closing the app/browser)
+// or, if the resident unchecks that box, to sessionStorage (cleared when
+// the tab/browser closes, but survives a plain refresh). init() in app.js
+// reads this back before the first render.
+const SESSION_KEY = "ms-villa:session";
+function persistSession(session, remember){
+  try{
+    if(remember){
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      sessionStorage.removeItem(SESSION_KEY);
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }catch(e){ /* storage unavailable - session just won't survive a refresh */ }
+}
+function loadPersistedSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function clearPersistedSession(){
+  try{
+    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  }catch(e){ /* ignore */ }
+}
+
